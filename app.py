@@ -90,6 +90,20 @@ def load_sample_data():
         'Universidades Públicas'
     ]
     
+    # Proveedores comunes
+    suppliers = [
+        'CONSTRUCCIONES ABC S.A.',
+        'SERVICIOS TÉCNICOS INTEGRALES',
+        'DISTRIBUIDORA COMERCIAL XYZ',
+        'INGENIERÍA Y PROYECTOS DEL SUR',
+        'TECNOLOGÍA AVANZADA ECUATORIANA',
+        'LOGÍSTICA Y TRANSPORTE ANDINO',
+        'CONSULTORÍA EMPRESARIAL S.A.',
+        'EQUIPOS MÉDICOS ESPECIALIZADOS',
+        'ALIMENTOS Y BEBIDAS NACIONALES',
+        'SEGURIDAD INTEGRAL PROFESIONAL'
+    ]
+    
     data = []
     
     # Generar datos desde 2015 hasta 2025
@@ -122,6 +136,7 @@ def load_sample_data():
                 'total': amount,
                 'contracts': random.randint(1, 5),
                 'entity': random.choice(entities),
+                'supplier': random.choice(suppliers),
                 'description': f'Contratación de {contract_type.lower()} para servicios varios'
             })
     
@@ -168,7 +183,9 @@ def prepare_and_clean_data(df):
         'cantidad_contratos': 'contracts',
         'fecha': 'date',
         'mes': 'month',
-        'año': 'year'
+        'año': 'year',
+        'proveedor': 'supplier',
+        'entidad': 'entity'
     }
     
     # Aplicar renombrado solo para columnas existentes
@@ -275,7 +292,7 @@ def prepare_and_clean_data(df):
         st.write("✅ Columna 'month_year' creada para agrupaciones temporales")
     
     # Asegurar que todas las columnas críticas existan
-    required_columns = ['total', 'internal_type', 'region', 'date']
+    required_columns = ['total', 'internal_type', 'region', 'date', 'entity', 'supplier']
     for col in required_columns:
         if col not in df_clean.columns:
             if col == 'total':
@@ -296,13 +313,19 @@ def prepare_and_clean_data(df):
                     random_date = start_date + timedelta(days=random_days)
                     dates.append(random_date)
                 df_clean['date'] = dates
+            elif col == 'entity':
+                entities = ['Ministerio de Salud', 'GAD Municipal', 'Universidad Pública']
+                df_clean['entity'] = [random.choice(entities) for _ in range(len(df_clean))]
+            elif col == 'supplier':
+                suppliers = ['CONSTRUCCIONES ABC', 'SERVICIOS TÉCNICOS', 'DISTRIBUIDORA XYZ']
+                df_clean['supplier'] = [random.choice(suppliers) for _ in range(len(df_clean))]
     
     st.success("✅ Proceso de limpieza y preparación completado exitosamente")
     
     return df_clean, initial_count, final_count
 
 # ================== FUNCIÓN PARA APLICAR FILTROS ==================
-def apply_filters(df, selected_year, selected_region, selected_type):
+def apply_filters(df, selected_year, selected_region, selected_type, search_term):
     """Aplica los filtros seleccionados al DataFrame"""
     
     df_filtered = df.copy()
@@ -318,6 +341,24 @@ def apply_filters(df, selected_year, selected_region, selected_type):
     # Aplicar filtro de tipo de contratación
     if selected_type != "Todos":
         df_filtered = df_filtered[df_filtered['internal_type'] == selected_type]
+    
+    # Aplicar filtro de búsqueda por palabra clave
+    if search_term:
+        search_columns = []
+        if 'entity' in df_filtered.columns:
+            search_columns.append('entity')
+        if 'supplier' in df_filtered.columns:
+            search_columns.append('supplier')
+        if 'description' in df_filtered.columns:
+            search_columns.append('description')
+        if 'internal_type' in df_filtered.columns:
+            search_columns.append('internal_type')
+        
+        if search_columns:
+            mask = pd.Series([False] * len(df_filtered))
+            for col in search_columns:
+                mask = mask | df_filtered[col].astype(str).str.contains(search_term, case=False, na=False)
+            df_filtered = df_filtered[mask]
     
     return df_filtered
 
@@ -358,6 +399,14 @@ type_options = ["Todos"] + [
 ]
 selected_type = st.sidebar.selectbox("Tipo de Contratación", type_options)
 
+# NUEVO: Filtro de búsqueda por palabra clave
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔎 Búsqueda por Palabra Clave")
+search_term = st.sidebar.text_input(
+    "Buscar en proveedores, entidades, descripciones:",
+    placeholder="Ej: Ministerio, CONSTRUCCIONES, salud..."
+)
+
 # Botón de consulta
 consultar = st.sidebar.button("📊 Cargar y Analizar Datos")
 
@@ -374,13 +423,17 @@ if consultar:
         # Preparar y limpiar los datos base
         df_base, initial_count, final_count = prepare_and_clean_data(df_raw)
         
-        # Aplicar filtros a los datos limpios
-        df_filtered = apply_filters(df_base, selected_year, selected_region, selected_type)
+        # Aplicar filtros a los datos limpios (INCLUYENDO LA NUEVA BÚSQUEDA)
+        df_filtered = apply_filters(df_base, selected_year, selected_region, selected_type, search_term)
         
         # Verificar que tenemos datos después de los filtros
         if len(df_filtered) == 0:
             st.error("No hay datos disponibles con los filtros seleccionados. Por favor, ajuste los filtros.")
             st.stop()
+        
+        # Mostrar información de búsqueda si se usó
+        if search_term:
+            st.info(f"🔎 Búsqueda aplicada: '{search_term}' - {len(df_filtered)} registros encontrados")
         
         st.success(f"Datos procesados exitosamente: {len(df_filtered)} registros")
         
@@ -621,6 +674,7 @@ else:
     - Análisis de datos desde 2015 hasta 2025
     - 24 provincias del Ecuador
     - 11 tipos de contratación diferentes
+    - **NUEVO: Búsqueda por palabra clave** (proveedores, entidades, etc.)
     - Visualizaciones interactivas
     - Exportación de resultados
     """)
@@ -631,4 +685,11 @@ st.sidebar.info("""
 **Guía Práctica 1**
 Análisis de Datos con Python
 Desarrollo de Software
+
+**🔎 Nueva función:**
+Búsqueda por palabra clave en:
+- Proveedores
+- Entidades  
+- Descripciones
+- Tipos de contratación
 """)
